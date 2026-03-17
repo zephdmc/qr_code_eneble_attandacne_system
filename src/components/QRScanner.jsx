@@ -134,15 +134,14 @@
 //   );
 // };
 
-// export default QRScanner;
-
-import { useState, useEffect, useRef, useContext } from "react";
+// export default QRScanner;import { useState, useEffect, useRef, useContext } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import { markAttendanceApi } from "../api/attendanceApi";
 import { AuthContext } from "../context/AuthContext";
 
 const QRScanner = () => {
   const { user } = useContext(AuthContext);
+
   const [result, setResult] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -151,18 +150,23 @@ const QRScanner = () => {
 
   const videoRef = useRef(null);
   const codeReaderRef = useRef(null);
+  const hasScannedRef = useRef(false); // 🚨 prevents multiple scans
 
-  // Generate / retrieve a persistent device ID
+  const isReady = deviceId && ip;
+
+  // ✅ Generate persistent device ID
   useEffect(() => {
     let storedDeviceId = localStorage.getItem("deviceId");
+
     if (!storedDeviceId) {
-      storedDeviceId = "device-" + Math.random().toString(36).substr(2, 9);
+      storedDeviceId = "device-" + Math.random().toString(36).substring(2, 11);
       localStorage.setItem("deviceId", storedDeviceId);
     }
+
     setDeviceId(storedDeviceId);
   }, []);
 
-  // Fetch public IP
+  // ✅ Fetch public IP
   useEffect(() => {
     const fetchIp = async () => {
       try {
@@ -171,93 +175,123 @@ const QRScanner = () => {
         setIp(data.ip);
       } catch (err) {
         console.error("IP fetch failed:", err);
-        setIp("unknown");
+        setIp("unknown"); // fallback
       }
     };
+
     fetchIp();
   }, []);
 
-  // QR Scanner initialization
+  // ✅ Start scanner ONLY when ready
   useEffect(() => {
-    if (!deviceId || !ip) return; // 🚨 WAIT
-  
+    if (!deviceId || !ip) {
+      console.log("⏳ Waiting for deviceId and ip...");
+      return;
+    }
+
+    console.log("✅ Scanner starting with:", { deviceId, ip });
+
     const codeReader = new BrowserQRCodeReader();
     codeReaderRef.current = codeReader;
-  
+
     const startScanner = async () => {
       try {
         if (!videoRef.current) return;
-  
+
         await codeReader.decodeFromConstraints(
           { video: { facingMode: "environment" } },
           videoRef.current,
           (result, error) => {
-            if (result) handleScan(result.getText());
-            if (error && error.name !== "NotFoundException") console.error(error);
+            if (result && !hasScannedRef.current) {
+              hasScannedRef.current = true; // 🚨 lock scanning
+              handleScan(result.getText());
+            }
+
+            if (error && error.name !== "NotFoundException") {
+              console.error(error);
+            }
           }
         );
       } catch (err) {
         console.error("Scanner error:", err);
       }
     };
-  
-    startScanner();
-  
-    return () => {
-      codeReader.reset();
-    };
-  }, [deviceId, ip]); // 👈 IMPORTANT
-  
 
+    startScanner();
+
+    return () => {
+      if (codeReaderRef.current) {
+        codeReaderRef.current.reset();
+      }
+    };
+  }, [deviceId, ip]);
+
+  // ✅ Handle scan
   const handleScan = async (data) => {
     if (!data) return;
-  
-    // 🚨 STOP if deviceId or ip not ready
+
+    // 🚨 Safety check
     if (!deviceId || !ip) {
-      console.warn("Device or IP not ready yet");
-      setMessage("⏳ Preparing scanner... please wait");
+      console.warn("❌ Blocked: deviceId or ip not ready");
+      setMessage("⏳ Please wait... initializing scanner");
+      hasScannedRef.current = false;
       return;
     }
-  
+
+    console.log("✅ Using:", { deviceId, ip });
+
     setResult(data);
     setLoading(true);
     setMessage("");
-  
+
     try {
       const parts = data.trim().split("|").map((p) => p.trim());
-  
-      if (parts.length !== 3) throw new Error("Invalid QR format");
-  
+
+      if (parts.length !== 3) {
+        throw new Error("Invalid QR format");
+      }
+
       const [courseId, sessionId] = parts;
-  
-      console.log("Sending:", {
+
+      const payload = {
         studentId: user?._id,
         sessionId,
         courseId,
         deviceId,
         ip,
-      });
-  
-      const response = await markAttendanceApi({
-        studentId: user?._id,
-        sessionId,
-        courseId,
-        deviceId,
-        ip,
-      });
-  
+      };
+
+      console.log("🚀 Sending:", payload);
+
+      const response = await markAttendanceApi(payload);
+
       setMessage(response.data?.message || "✅ Attendance marked!");
     } catch (err) {
-      console.error(err);
+      console.error("Attendance error:", err);
+
       setMessage(
         err.response?.data?.message ||
-        "❌ Error marking attendance"
+          err.message ||
+          "❌ Error marking attendance"
       );
+
+      // 🔓 allow retry if failed
+      hasScannedRef.current = false;
     }
-  
+
     setLoading(false);
   };
-  
+
+  // ✅ Show loader before ready
+  if (!isReady) {
+    return (
+      <div style={{ textAlign: "center", marginTop: "40px" }}>
+        <p style={{ fontWeight: "500", color: "#555" }}>
+          ⏳ Initializing scanner...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -306,7 +340,9 @@ const QRScanner = () => {
             padding: "10px 16px",
             borderRadius: "12px",
             textAlign: "center",
-            backgroundColor: message.includes("✅") ? "#d4edda" : "#f8d7da",
+            backgroundColor: message.includes("✅")
+              ? "#d4edda"
+              : "#f8d7da",
             color: message.includes("✅") ? "#155724" : "#721c24",
             fontWeight: "500",
             maxWidth: "400px",
@@ -321,4 +357,3 @@ const QRScanner = () => {
 };
 
 export default QRScanner;
-
