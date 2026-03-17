@@ -135,6 +135,8 @@
 // };
 
 // export default QRScanner;import { useState, useEffect, useRef, useContext } from "react";
+
+
 import { useEffect, useRef, useState, useContext } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import { markAttendanceApi } from "../api/attendanceApi";
@@ -234,58 +236,87 @@ const QRScanner = () => {
 
   // ✅ Handle scan (FULLY FIXED)
   const handleScan = async (data) => {
-    if (!data) return;
-
-    // ✅ Always guarantee values
+    console.log("📸 QR RAW DATA:", data);
+  
+    if (!data) {
+      console.warn("❌ No QR data received");
+      return;
+    }
+  
+    // ✅ Check user
+    console.log("👤 User object:", user);
+  
+    if (!user?._id) {
+      console.error("❌ User not logged in or missing ID");
+      setMessage("❌ You must be logged in");
+      hasScannedRef.current = false;
+      return;
+    }
+  
+    // ✅ Guarantee values
     const safeDeviceId =
       deviceId || localStorage.getItem("deviceId") || "unknown-device";
-
+  
     const safeIp = ip || "unknown";
-
-    console.log("✅ Using:", { safeDeviceId, safeIp });
-
+  
+    console.log("📱 Device + IP:", {
+      deviceId,
+      safeDeviceId,
+      ip,
+      safeIp,
+    });
+  
     setResult(data);
     setLoading(true);
     setMessage("");
-
+  
     try {
       const parts = data.trim().split("|").map((p) => p.trim());
-
-      // ✅ Flexible validation
+  
+      console.log("🔍 QR parts:", parts);
+  
       if (parts.length < 2) {
         throw new Error("Invalid QR format");
       }
-
+  
       const [courseId, sessionId] = parts;
-
+  
+      console.log("📚 Extracted:", { courseId, sessionId });
+  
       const payload = {
-        studentId: user?._id,
+        studentId: user._id,
         sessionId,
         courseId,
         deviceId: safeDeviceId,
         ip: safeIp,
       };
-
-      console.log("🚀 Sending:", payload);
-
+  
+      console.log("🚀 FINAL PAYLOAD:", payload);
+  
+      // ✅ VERY IMPORTANT: log API URL
+      console.log("🌐 API CALL:", markAttendanceApi);
+  
       const response = await markAttendanceApi(payload);
-
+  
+      console.log("✅ RESPONSE:", response);
+  
       setMessage(response.data?.message || "✅ Attendance marked!");
     } catch (err) {
-      console.error("Attendance error:", err);
-
+      console.error("❌ FULL ERROR:", err);
+      console.error("❌ ERROR RESPONSE:", err?.response);
+  
       setMessage(
         err.response?.data?.message ||
           err.message ||
           "❌ Error marking attendance"
       );
-
-      // 🔓 allow retry if failed
+  
       hasScannedRef.current = false;
     }
-
+  
     setLoading(false);
   };
+  
 
   // ✅ Loading state before ready
   if (!isReady) {
