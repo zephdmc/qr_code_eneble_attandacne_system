@@ -64,7 +64,7 @@ const AttendanceScan = () => {
             textAlign: "center",
           }}
         >
-          Attendance Scanner
+          Attendance Scanner Now
         </h1>
 
         <div
