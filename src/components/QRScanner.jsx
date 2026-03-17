@@ -240,10 +240,12 @@ const QRScanner = () => {
   
     if (!data) {
       console.warn("❌ No QR data received");
+      hasScannedRef.current = false;
+      setMessage("❌ No QR data received");
       return;
     }
   
-    // ✅ Check user
+    // ✅ Log user object
     console.log("👤 User object:", user);
   
     if (!user?._id) {
@@ -253,69 +255,71 @@ const QRScanner = () => {
       return;
     }
   
-    // ✅ Guarantee values
-    const safeDeviceId =
-      deviceId || localStorage.getItem("deviceId") || "unknown-device";
-  
+    // ✅ Safe Device ID and IP
+    const safeDeviceId = deviceId || localStorage.getItem("deviceId") || "unknown-device";
     const safeIp = ip || "unknown";
   
-    console.log("📱 Device + IP:", {
-      deviceId,
-      safeDeviceId,
-      ip,
-      safeIp,
+    console.log("📱 Device + IP:", { deviceId, safeDeviceId, ip, safeIp });
+  
+    // ✅ Parse QR data
+    const parts = data.trim().split("|").map((p) => p.trim());
+    console.log("🔍 QR parts:", parts);
+  
+    const [courseId, sessionId] = parts || [];
+  
+    // ✅ Log prepared payload even if QR is invalid
+    console.log("📡 PREPARE TO SEND ATTENDANCE:", {
+      studentId: user._id || "missing-user",
+      courseId: courseId || "missing-courseId",
+      sessionId: sessionId || "missing-sessionId",
+      deviceId: safeDeviceId,
+      ip: safeIp,
     });
+  
+    if (parts.length < 2) {
+      console.error("❌ Invalid QR format, expected 'courseId|sessionId'");
+      setMessage("❌ Invalid QR format");
+      hasScannedRef.current = false;
+      return;
+    }
+  
+    // ✅ Construct final payload
+    const payload = {
+      studentId: user._id,
+      sessionId,
+      courseId,
+      deviceId: safeDeviceId,
+      ip: safeIp,
+    };
+  
+    console.log("🚀 FINAL PAYLOAD (valid QR):", payload);
+  
+    // ✅ Show API endpoint
+    console.log("🌐 API CALL:", markAttendanceApi);
   
     setResult(data);
     setLoading(true);
     setMessage("");
   
     try {
-      const parts = data.trim().split("|").map((p) => p.trim());
-  
-      console.log("🔍 QR parts:", parts);
-  
-      if (parts.length < 2) {
-        throw new Error("Invalid QR format");
-      }
-  
-      const [courseId, sessionId] = parts;
-  
-      console.log("📚 Extracted:", { courseId, sessionId });
-  
-      const payload = {
-        studentId: user._id,
-        sessionId,
-        courseId,
-        deviceId: safeDeviceId,
-        ip: safeIp,
-      };
-  
-      console.log("🚀 FINAL PAYLOAD:", payload);
-  
-      // ✅ VERY IMPORTANT: log API URL
-      console.log("🌐 API CALL:", markAttendanceApi);
-  
       const response = await markAttendanceApi(payload);
   
       console.log("✅ RESPONSE:", response);
-  
       setMessage(response.data?.message || "✅ Attendance marked!");
     } catch (err) {
       console.error("❌ FULL ERROR:", err);
       console.error("❌ ERROR RESPONSE:", err?.response);
   
       setMessage(
-        err.response?.data?.message ||
-          err.message ||
-          "❌ Error marking attendance"
+        err.response?.data?.message || err.message || "❌ Error marking attendance"
       );
   
       hasScannedRef.current = false;
+    } finally {
+      setLoading(false);
     }
-  
-    setLoading(false);
   };
+  
   
 
   // ✅ Loading state before ready
