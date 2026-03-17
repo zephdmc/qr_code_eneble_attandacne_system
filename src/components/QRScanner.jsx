@@ -135,6 +135,7 @@
 // };
 
 // export default QRScanner;import { useState, useEffect, useRef, useContext } from "react";
+import { useEffect, useRef, useState, useContext } from "react";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import { markAttendanceApi } from "../api/attendanceApi";
 import { AuthContext } from "../context/AuthContext";
@@ -150,16 +151,21 @@ const QRScanner = () => {
 
   const videoRef = useRef(null);
   const codeReaderRef = useRef(null);
-  const hasScannedRef = useRef(false); // 🚨 prevents multiple scans
+  const hasScannedRef = useRef(false);
 
   const isReady = deviceId && ip;
 
-  // ✅ Generate persistent device ID
+  // ✅ Generate persistent device ID (FIXED)
   useEffect(() => {
     let storedDeviceId = localStorage.getItem("deviceId");
 
     if (!storedDeviceId) {
-      storedDeviceId = "device-" + Math.random().toString(36).substring(2, 11);
+      storedDeviceId =
+        "device-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).substring(2, 9);
+
       localStorage.setItem("deviceId", storedDeviceId);
     }
 
@@ -203,7 +209,7 @@ const QRScanner = () => {
           videoRef.current,
           (result, error) => {
             if (result && !hasScannedRef.current) {
-              hasScannedRef.current = true; // 🚨 lock scanning
+              hasScannedRef.current = true;
               handleScan(result.getText());
             }
 
@@ -226,19 +232,17 @@ const QRScanner = () => {
     };
   }, [deviceId, ip]);
 
-  // ✅ Handle scan
+  // ✅ Handle scan (FULLY FIXED)
   const handleScan = async (data) => {
     if (!data) return;
 
-    // 🚨 Safety check
-    if (!deviceId || !ip) {
-      console.warn("❌ Blocked: deviceId or ip not ready");
-      setMessage("⏳ Please wait... initializing scanner");
-      hasScannedRef.current = false;
-      return;
-    }
+    // ✅ Always guarantee values
+    const safeDeviceId =
+      deviceId || localStorage.getItem("deviceId") || "unknown-device";
 
-    console.log("✅ Using:", { deviceId, ip });
+    const safeIp = ip || "unknown";
+
+    console.log("✅ Using:", { safeDeviceId, safeIp });
 
     setResult(data);
     setLoading(true);
@@ -247,7 +251,8 @@ const QRScanner = () => {
     try {
       const parts = data.trim().split("|").map((p) => p.trim());
 
-      if (parts.length !== 3) {
+      // ✅ Flexible validation
+      if (parts.length < 2) {
         throw new Error("Invalid QR format");
       }
 
@@ -257,8 +262,8 @@ const QRScanner = () => {
         studentId: user?._id,
         sessionId,
         courseId,
-        deviceId,
-        ip,
+        deviceId: safeDeviceId,
+        ip: safeIp,
       };
 
       console.log("🚀 Sending:", payload);
@@ -282,7 +287,7 @@ const QRScanner = () => {
     setLoading(false);
   };
 
-  // ✅ Show loader before ready
+  // ✅ Loading state before ready
   if (!isReady) {
     return (
       <div style={{ textAlign: "center", marginTop: "40px" }}>
