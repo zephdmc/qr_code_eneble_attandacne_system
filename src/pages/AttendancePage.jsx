@@ -338,7 +338,7 @@ const AttendancePage = () => {
   return (
     <DashboardLayout>
       <div style={containerStyle}>
-        <h2 style={headerStyle}>Attendance Records</h2>
+        <h2 style={headerStyle}>Attendance Records Now</h2>
 
         {/* QR Scanner for students */}
         {user.role === "student" && (
